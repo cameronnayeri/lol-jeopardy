@@ -1,12 +1,17 @@
-import { sb, $, normCode, uid, fmtScore, fetchGame, saveGame, watchTable, toast, countdown } from "./common.js";
-import { BUZZ_WINDOW, ANSWER_WINDOW } from "./config.js";
+import { sb, $, normCode, uid, fmtScore, fetchGame, saveGame, watchTable, toast } from "./common.js";
 import { BOARDS, VALUES } from "./questions.js";
+
+// Host flow (stream-safe: this screen never shows an answer):
+//   click a cell  -> clue shown, buzzers open immediately
+//   first buzz    -> clue hidden, buzzer's name shown; host judges Correct / Wrong
+//   Wrong         -> that player locked out, clue back, buzzers reopen
+//   End question  -> back to board, cell marked used
+// No timers. The host decides when a question is over.
 
 let code = "";
 let state = null;
-let stopTimer = null;
 let resolvingBuzz = false;
-let channels = [];
+let pollHandle = null;
 
 // ---------- Setup ----------
 const boardSel = $("#boardSel");
@@ -55,12 +60,12 @@ function freshState(boardIdx) {
     lockedOut: [],
     wager: null,
     final: null,
-    v: 1
+    v: 2
   };
 }
 
 async function loadPlayers() {
-  const { data } = await sb.from("players").select("name").eq("code", code);
+  const { data } = await sb.from("lj_players").select("name").eq("code", code);
   (data || []).forEach((p) => {
     if (!(p.name in state.players)) state.players[p.name] = 0;
   });
@@ -73,18 +78,17 @@ function enterGame() {
   $("#codeLabel").textContent = code;
   $("#boardLabel").textContent = BOARDS[state.board].name;
 
-  channels.push(
-    watchTable("players", code, "INSERT", (row) => {
-      if (!(row.name in state.players)) {
-        state.players[row.name] = 0;
-        log(row.name + " joined");
-        // Save without re-rendering the overlay so a join doesn't wipe Daily Double / Final inputs mid-typing.
-        saveGame(code, state).catch((e) => toast("Save failed: " + (e.message || e)));
-        renderScores();
-      }
-    })
-  );
-  channels.push(watchTable("buzzes", code, "INSERT", onBuzzInsert));
+  watchTable("lj_players", code, "INSERT", (row) => addPlayer(row.name));
+  watchTable("lj_buzzes", code, "INSERT", () => resolveBuzz());
+
+  // Fallbacks in case realtime is slow or off: poll players every 3s, buzzes every 250ms while open.
+  setInterval(async () => {
+    const { data } = await sb.from("lj_players").select("name").eq("code", code);
+    (data || []).forEach((p) => addPlayer(p.name));
+  }, 3000);
+  pollHandle = setInterval(() => {
+    if (state && state.phase === "open") resolveBuzz();
+  }, 250);
 
   sb.channel("ping-" + code).subscribe((s) => {
     $("#conn").textContent = s === "SUBSCRIBED" ? "live" : s.toLowerCase();
@@ -101,6 +105,14 @@ function enterGame() {
 
   render();
   save();
+}
+
+function addPlayer(name) {
+  if (!state || name in state.players) return;
+  state.players[name] = 0;
+  log(name + " joined");
+  saveGame(code, state).catch((e) => toast("Save failed: " + (e.message || e)));
+  renderScores();
 }
 
 async function save() {
@@ -144,7 +156,8 @@ function renderBoard() {
       const cell = document.createElement("div");
       cell.className = "cell value" + (state.used[key] ? " used" : "");
       cell.textContent = "$" + val;
-      if (!state.used[key]) cell.onclick = () => openClue(c, v);
+      cell.title = "Click: open clue with buzzers. Shift+click: Daily Double.";
+      if (!state.used[key]) cell.onclick = (e) => (e.shiftKey ? openDailyDouble(c, v) : openClue(c, v));
       el.appendChild(cell);
     });
   });
@@ -176,7 +189,7 @@ function renderScores() {
     row.querySelector("button[data-x]").onclick = async () => {
       if (!confirm("Remove " + name + "?")) return;
       delete state.players[name];
-      await sb.from("players").delete().eq("code", code).eq("name", name);
+      await sb.from("lj_players").delete().eq("code", code).eq("name", name);
       save();
     };
     el.appendChild(row);
@@ -192,58 +205,50 @@ function currentClue() {
 
 function openClue(c, v) {
   state.clue = { c, v, value: VALUES[v] };
-  state.phase = "clue";
-  state.round = null;
-  state.buzzer = null;
   state.lockedOut = [];
   state.wager = null;
-  save();
+  openBuzzers();
 }
 
 function openBuzzers() {
   state.phase = "open";
   state.round = uid();
   state.buzzer = null;
-  state.openedAt = Date.now();
   save();
-  startTimer(BUZZ_WINDOW, false, () => {
-    if (state.phase === "open") {
-      state.phase = "reveal";
-      state.round = null;
-      log("Nobody buzzed");
-      save();
-    }
-  });
 }
 
-async function onBuzzInsert(row) {
-  if (!state || state.phase !== "open" || row.round !== state.round) return;
-  if (state.lockedOut.includes(row.name)) return;
-  if (resolvingBuzz) return;
+async function resolveBuzz() {
+  if (!state || state.phase !== "open" || !state.round || resolvingBuzz) return;
   resolvingBuzz = true;
-  // Short grace window so near-simultaneous buzzes are ordered by the database, not by whose event reached us first.
-  setTimeout(async () => {
-    try {
-      const { data } = await sb
-        .from("buzzes")
-        .select("name,id")
-        .eq("code", code)
-        .eq("round", state.round)
-        .order("id", { ascending: true })
-        .limit(10);
-      const winner = (data || []).find((b) => !state.lockedOut.includes(b.name) && b.name in state.players);
-      if (winner && state.phase === "open") {
-        state.phase = "buzzed";
-        state.buzzer = winner.name;
-        state.buzzedAt = Date.now();
-        log(winner.name + " buzzed first");
-        await save();
-        startTimer(ANSWER_WINDOW, true, () => toast("Answer time is up"));
-      }
-    } finally {
-      resolvingBuzz = false;
+  const round = state.round;
+  try {
+    const { data } = await sb
+      .from("lj_buzzes")
+      .select("name,id")
+      .eq("code", code)
+      .eq("round", round)
+      .order("id", { ascending: true })
+      .limit(10);
+    if (!data || !data.length) return;
+    // Tiny grace so two near-simultaneous buzzes are ordered by the database, not by arrival here.
+    await new Promise((r) => setTimeout(r, 120));
+    const { data: data2 } = await sb
+      .from("lj_buzzes")
+      .select("name,id")
+      .eq("code", code)
+      .eq("round", round)
+      .order("id", { ascending: true })
+      .limit(10);
+    const winner = (data2 || data).find((b) => !state.lockedOut.includes(b.name) && b.name in state.players);
+    if (winner && state.phase === "open" && state.round === round) {
+      state.phase = "buzzed";
+      state.buzzer = winner.name;
+      log(winner.name + " buzzed first");
+      await save();
     }
-  }, 150);
+  } finally {
+    resolvingBuzz = false;
+  }
 }
 
 function judge(correct) {
@@ -253,31 +258,23 @@ function judge(correct) {
     state.players[name] += amount;
     log(name + " +" + amount);
     closeClue();
-  } else {
-    state.players[name] -= amount;
-    log(name + " -" + amount);
-    if (state.wager != null) {
-      // Daily Double: only one shot.
-      state.phase = "reveal";
-      state.buzzer = null;
-      save();
-      return;
-    }
-    state.lockedOut.push(name);
-    state.buzzer = null;
-    const eligible = Object.keys(state.players).filter((n) => !state.lockedOut.includes(n));
-    if (eligible.length === 0) {
-      state.phase = "reveal";
-      state.round = null;
-      save();
-    } else {
-      openBuzzers();
-    }
+    return;
   }
+  state.players[name] -= amount;
+  log(name + " -" + amount);
+  if (state.wager != null) {
+    // Daily Double: one shot.
+    closeClue();
+    return;
+  }
+  state.lockedOut.push(name);
+  state.buzzer = null;
+  const eligible = Object.keys(state.players).filter((n) => !state.lockedOut.includes(n));
+  if (eligible.length === 0) closeClue();
+  else openBuzzers();
 }
 
 function closeClue() {
-  stopTimerNow();
   if (state.clue) state.used[state.clue.c + "-" + state.clue.v] = true;
   state.phase = "board";
   state.clue = null;
@@ -289,67 +286,19 @@ function closeClue() {
 }
 
 function cancelBuzz() {
-  // Back to the clue with buzzers closed; no penalty.
-  stopTimerNow();
-  state.phase = "clue";
+  // Back to the open clue, no penalty, fresh round.
+  state.buzzer = null;
+  openBuzzers();
+}
+
+function openDailyDouble(c, v) {
+  state.clue = { c, v, value: VALUES[v] };
+  state.lockedOut = [];
+  state.phase = "dd";
   state.round = null;
   state.buzzer = null;
+  state.wager = null;
   save();
-}
-
-function startDailyDouble() {
-  const names = Object.keys(state.players);
-  if (!names.length) return toast("No players");
-  const foot = $("#ovFoot");
-  foot.innerHTML = "";
-  const sel = document.createElement("select");
-  names.forEach((n) => {
-    const o = document.createElement("option");
-    o.value = n;
-    o.textContent = n;
-    sel.appendChild(o);
-  });
-  const inp = document.createElement("input");
-  inp.type = "number";
-  inp.placeholder = "Wager";
-  inp.value = state.clue.value;
-  inp.style.width = "120px";
-  const go = document.createElement("button");
-  go.textContent = "Lock in";
-  go.onclick = () => {
-    const w = Math.max(0, Number(inp.value) || 0);
-    state.wager = w;
-    state.buzzer = sel.value;
-    state.phase = "buzzed";
-    state.round = null;
-    log("Daily Double: " + sel.value + " wagers " + w);
-    save();
-    startTimer(ANSWER_WINDOW, true, () => toast("Answer time is up"));
-  };
-  const back = btn("Back", () => render(), "ghost");
-  foot.append(sel, inp, go, back);
-}
-
-// ---------- Timer ----------
-function startTimer(seconds, red, onDone) {
-  stopTimerNow();
-  const bar = $("#timer");
-  bar.classList.remove("hidden");
-  bar.classList.toggle("red", !!red);
-  const fill = bar.querySelector("i");
-  stopTimer = countdown(
-    seconds,
-    (left) => (fill.style.transform = "scaleX(" + left / seconds + ")"),
-    () => {
-      stopTimer = null;
-      onDone && onDone();
-    }
-  );
-}
-function stopTimerNow() {
-  if (stopTimer) stopTimer();
-  stopTimer = null;
-  $("#timer").classList.add("hidden");
 }
 
 // ---------- Overlay ----------
@@ -367,11 +316,11 @@ function renderOverlay() {
   const foot = $("#ovFoot");
   body.className = "body";
   foot.innerHTML = "";
+  $("#timer").classList.add("hidden");
 
   if (state.phase === "final") return renderFinal();
   if (state.phase === "board" || !state.clue) {
     ov.classList.add("hidden");
-    stopTimerNow();
     return;
   }
   ov.classList.remove("hidden");
@@ -379,47 +328,67 @@ function renderOverlay() {
   $("#ovCat").textContent = cat.name;
   $("#ovVal").textContent = state.wager != null ? "Daily Double: $" + state.wager : "$" + value;
 
-  if (state.phase === "clue") {
-    body.innerHTML = `<div>${escapeHtml(item.clue)}</div>`;
-    if (item.clue.length > 160) body.classList.add("small");
-    foot.append(
-      btn("Open buzzers (space)", openBuzzers),
-      btn("Daily Double", startDailyDouble, "ghost"),
-      btn("Skip", closeClue, "ghost")
-    );
-    const ans = document.createElement("span");
-    ans.className = "answer";
-    ans.textContent = "Answer: " + item.answer + (cat.note ? "  ·  " + cat.note : "");
-    foot.append(ans);
-  }
-
   if (state.phase === "open") {
     body.innerHTML = `<div>${escapeHtml(item.clue)}</div>`;
     if (item.clue.length > 160) body.classList.add("small");
-    foot.append(btn("Nobody buzzed: reveal", () => { stopTimerNow(); state.phase = "reveal"; state.round = null; save(); }, "ghost"));
-    const ans = document.createElement("span");
-    ans.className = "answer";
-    ans.textContent = "Answer: " + item.answer;
-    foot.append(ans);
+    foot.append(
+      btn("End question (space)", closeClue),
+      btn("Reopen buzzers", openBuzzers, "ghost")
+    );
+    if (cat.note) {
+      const n = document.createElement("span");
+      n.className = "answer";
+      n.textContent = cat.note;
+      foot.append(n);
+    }
   }
 
-  if (state.phase === "buzzed") {
-    // Clue is hidden from the shared screen; host keeps a greyed copy to judge the answer.
-    body.innerHTML = `<div class="buzzed">
-        <div class="who">${escapeHtml(state.buzzer)}</div>
-        <div class="sub">${state.wager != null ? "Daily Double" : "buzzed first"}</div>
-        <div class="hostpeek"><b>Clue:</b> ${escapeHtml(item.clue)}<br/><b>Answer:</b> ${escapeHtml(item.answer)}</div>
-      </div>`;
+  if (state.phase === "dd") {
+    body.innerHTML = `<div class="buzzed"><div class="who">Daily Double</div><div class="sub">Pick the player and wager</div></div>`;
+    const names = Object.keys(state.players);
+    const sel = document.createElement("select");
+    names.forEach((n) => {
+      const o = document.createElement("option");
+      o.value = n;
+      o.textContent = n;
+      sel.appendChild(o);
+    });
+    const inp = document.createElement("input");
+    inp.type = "number";
+    inp.placeholder = "Wager";
+    inp.value = value;
+    inp.style.width = "120px";
     foot.append(
-      btn("Correct (↑)", () => judge(true), "good"),
-      btn("Wrong (↓)", () => judge(false), "danger"),
-      btn("Cancel", cancelBuzz, "ghost")
+      sel,
+      inp,
+      btn("Show clue", () => {
+        if (!names.length) return toast("No players");
+        state.wager = Math.max(0, Number(inp.value) || 0);
+        state.buzzer = sel.value;
+        state.phase = "buzzed";
+        log("Daily Double: " + sel.value + " wagers " + state.wager);
+        save();
+      }),
+      btn("Cancel", () => { state.phase = "board"; state.clue = null; save(); }, "ghost")
     );
   }
 
-  if (state.phase === "reveal") {
-    body.innerHTML = `<div class="answer reveal">${escapeHtml(item.answer)}</div>`;
-    foot.append(btn("Back to board (space)", closeClue));
+  if (state.phase === "buzzed") {
+    if (state.wager != null) {
+      // Daily Double: the clue stays visible since only one player answers.
+      body.innerHTML = `<div>${escapeHtml(item.clue)}</div>`;
+      if (item.clue.length > 160) body.classList.add("small");
+    } else {
+      body.innerHTML = `<div class="buzzed">
+          <div class="who">${escapeHtml(state.buzzer)}</div>
+          <div class="sub">buzzed first</div>
+        </div>`;
+    }
+    foot.append(
+      btn("Correct (↑)", () => judge(true), "good"),
+      btn("Wrong (↓)", () => judge(false), "danger")
+    );
+    if (state.wager == null) foot.append(btn("Cancel buzz", cancelBuzz, "ghost"));
   }
 }
 
@@ -431,22 +400,17 @@ function escapeHtml(s) {
 document.addEventListener("keydown", (e) => {
   if (!state || $("#game").classList.contains("hidden")) return;
   if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
-  if (e.code === "Space") {
-    e.preventDefault();
-    if (state.phase === "clue") openBuzzers();
-    else if (state.phase === "reveal") closeClue();
-  }
+  if (e.code === "Space" && state.phase === "open") { e.preventDefault(); closeClue(); }
   if (state.phase === "buzzed") {
     if (e.code === "ArrowUp") { e.preventDefault(); judge(true); }
     if (e.code === "ArrowDown") { e.preventDefault(); judge(false); }
   }
-  if (e.code === "Escape" && (state.phase === "clue" || state.phase === "open")) { stopTimerNow(); closeClue(); }
+  if (e.code === "Escape" && (state.phase === "open" || state.phase === "buzzed" || state.phase === "dd")) closeClue();
 });
 
 // ---------- Final Jeopardy ----------
 function startFinal() {
   if (!confirm("Start Final Jeopardy? This hides the board.")) return;
-  stopTimerNow();
   const wagers = {};
   Object.keys(state.players).forEach((n) => (wagers[n] = 0));
   state.phase = "final";
@@ -498,7 +462,7 @@ function renderFinal() {
       const row = document.createElement("div");
       row.className = "finalrow";
       const res = f.results[n];
-      row.innerHTML = `<span>${escapeHtml(n)} <small style="color:var(--muted)">wager $${f.wagers[n] || 0}</small></span><span>${res === true ? "✔ correct" : res === false ? "✘ wrong" : ""}</span>`;
+      row.innerHTML = `<span>${escapeHtml(n)} <small style="color:var(--muted)">wager $${f.wagers[n] || 0}</small></span><span>${res === true ? "✔" : res === false ? "✘" : ""}</span>`;
       row.append(
         btn("Correct", () => { if (f.results[n] !== undefined) return; f.results[n] = true; state.players[n] += f.wagers[n] || 0; save(); }, "good"),
         btn("Wrong", () => { if (f.results[n] !== undefined) return; f.results[n] = false; state.players[n] -= f.wagers[n] || 0; save(); }, "danger")
@@ -506,10 +470,6 @@ function renderFinal() {
       grid.appendChild(row);
     });
     foot.appendChild(grid);
-    const ans = document.createElement("span");
-    ans.className = "answer";
-    ans.textContent = "Answer: " + fin.answer;
-    foot.append(ans);
     foot.append(btn("Show final scores", () => { f.stage = "done"; save(); }));
   }
 

@@ -1,11 +1,9 @@
 import { sb, $, normCode, normName, fmtScore, fetchGame, watchGame, toast } from "./common.js";
-import { EARLY_LOCKOUT } from "./config.js";
 
 let code = "";
 let me = "";
 let state = null;
-let buzzedRound = null;   // round id we already buzzed in
-let lockedUntil = 0;      // early-buzz penalty
+let buzzedRound = null; // round id we already buzzed in
 
 $("#code").value = localStorage.getItem("playerCode") || "";
 $("#name").value = localStorage.getItem("playerName") || "";
@@ -37,26 +35,30 @@ async function join() {
   }
 }
 
+function applyState(s) {
+  if (!s) return;
+  state = s;
+  render();
+}
+
 function enterPlay() {
   $("#join").classList.add("hidden");
   $("#play").classList.remove("hidden");
   $("#codeLabel").textContent = code;
   $("#me").textContent = me;
 
-  watchGame(code, (s) => {
-    state = s;
-    render();
-  });
+  watchGame(code, applyState);
+  // Fallback poll in case realtime is slow or off.
+  setInterval(async () => {
+    try { applyState(await fetchGame(code)); } catch (_) {}
+  }, 700);
+
   sb.channel("ping-" + code + "-" + me).subscribe((st) => {
     $("#conn").textContent = st === "SUBSCRIBED" ? "live" : st.toLowerCase();
   });
 
-  // Refresh state if the tab was asleep.
   document.addEventListener("visibilitychange", async () => {
-    if (document.visibilityState === "visible") {
-      const s = await fetchGame(code);
-      if (s) { state = s; render(); }
-    }
+    if (document.visibilityState === "visible") applyState(await fetchGame(code));
   });
 
   $("#buzz").onclick = buzz;
@@ -71,36 +73,21 @@ function enterPlay() {
 }
 
 async function buzz() {
-  if (!state) return;
-  const now = Date.now();
-  if (now < lockedUntil) return;
-
-  if (state.phase !== "open") {
-    // Too early: short lockout so mashing doesn't pay.
-    if (state.phase === "clue") {
-      lockedUntil = now + EARLY_LOCKOUT * 1000;
-      flash("early", "Too early");
-    }
-    return;
-  }
+  if (!state || state.phase !== "open" || !state.round) return;
   if (state.lockedOut && state.lockedOut.includes(me)) return;
   if (buzzedRound === state.round) return;
 
   buzzedRound = state.round;
-  flash("", "Buzzed");
+  const b = $("#buzz");
+  b.classList.remove("open");
+  b.textContent = "Buzzed";
+  b.disabled = true;
   const { error } = await sb.from("lj_buzzes").insert({ code, round: state.round, name: me });
   if (error) {
     buzzedRound = null;
     toast("Buzz failed, try again");
+    render();
   }
-}
-
-function flash(cls, text) {
-  const b = $("#buzz");
-  b.classList.remove("early", "won", "open");
-  if (cls) b.classList.add(cls);
-  b.textContent = text;
-  setTimeout(render, EARLY_LOCKOUT * 1000);
 }
 
 function render() {
@@ -113,16 +100,11 @@ function render() {
   b.disabled = true;
   b.textContent = "Buzz";
   st.className = "statusline dim";
-  hint.textContent = "Space or click when buzzers open";
+  hint.textContent = "Space or click to buzz";
 
   switch (state.phase) {
     case "board":
       st.textContent = "Host is picking a clue";
-      break;
-    case "clue":
-      st.textContent = "Listen";
-      st.className = "statusline";
-      hint.textContent = "Buzzing early locks you out for a moment";
       break;
     case "open":
       if (locked) {
@@ -130,12 +112,17 @@ function render() {
       } else if (buzzedRound === state.round) {
         st.textContent = "Buzzed...";
         st.className = "statusline";
+        b.textContent = "Buzzed";
       } else {
         st.textContent = "Buzzers open!";
         st.className = "statusline";
         b.disabled = false;
         b.classList.add("open");
       }
+      break;
+    case "dd":
+      st.textContent = "Daily Double";
+      st.className = "statusline";
       break;
     case "buzzed":
       if (state.buzzer === me) {
@@ -146,9 +133,6 @@ function render() {
       } else {
         st.textContent = state.buzzer + (state.wager != null ? " has a Daily Double" : " buzzed first");
       }
-      break;
-    case "reveal":
-      st.textContent = "Clue over";
       break;
     case "final":
       st.textContent = "Final Jeopardy";
