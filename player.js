@@ -25,7 +25,7 @@ async function join() {
       $("#joinMsg").textContent = "No game with that code yet. Ask the host.";
       return;
     }
-    const { error } = await sb.from("players").upsert({ code, name: me }, { onConflict: "code,name", ignoreDuplicates: true });
+    const { error } = await sb.from("lj_players").upsert({ code, name: me }, { onConflict: "code,name", ignoreDuplicates: true });
     if (error) throw error;
     localStorage.setItem("playerCode", code);
     localStorage.setItem("playerName", me);
@@ -88,7 +88,7 @@ async function buzz() {
 
   buzzedRound = state.round;
   flash("", "Buzzed");
-  const { error } = await sb.from("buzzes").insert({ code, round: state.round, name: me });
+  const { error } = await sb.from("lj_buzzes").insert({ code, round: state.round, name: me });
   if (error) {
     buzzedRound = null;
     toast("Buzz failed, try again");

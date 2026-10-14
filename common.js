@@ -24,14 +24,14 @@ export function fmtScore(n) {
 }
 
 export async function fetchGame(code) {
-  const { data, error } = await sb.from("games").select("state").eq("code", code).maybeSingle();
+  const { data, error } = await sb.from("lj_games").select("state").eq("code", code).maybeSingle();
   if (error) throw error;
   return data ? data.state : null;
 }
 
 export async function saveGame(code, state) {
   const { error } = await sb
-    .from("games")
+    .from("lj_games")
     .upsert({ code, state, updated_at: new Date().toISOString() }, { onConflict: "code" });
   if (error) throw error;
 }
@@ -42,7 +42,7 @@ export function watchGame(code, cb) {
     .channel("game-" + code)
     .on(
       "postgres_changes",
-      { event: "*", schema: "public", table: "games", filter: "code=eq." + code },
+      { event: "*", schema: "public", table: "lj_games", filter: "code=eq." + code },
       (payload) => {
         if (payload.new && payload.new.state) cb(payload.new.state);
       }
