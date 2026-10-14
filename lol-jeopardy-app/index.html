@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LoL Jeopardy</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Join -->
+  <div id="join" class="center">
+    <div class="card">
+      <h1>LoL Jeopardy</h1>
+      <p>Enter the room code from the host and your name. Keep this tab open next to Discord.</p>
+      <label>Room code
+        <input id="code" placeholder="e.g. LOL1" maxlength="8" autocomplete="off" />
+      </label>
+      <label>Your name
+        <input id="name" placeholder="Summoner name" maxlength="20" autocomplete="off" />
+      </label>
+      <button id="joinBtn">Join</button>
+      <p id="joinMsg"></p>
+      <p><a href="host.html" style="color:var(--muted)">I'm the host</a></p>
+    </div>
+  </div>
+
+  <!-- Play -->
+  <div id="play" class="player hidden">
+    <div class="topbar">
+      <h1>LoL Jeopardy</h1>
+      <span class="code" id="codeLabel"></span>
+      <span class="spacer"></span>
+      <span class="status" id="me"></span>
+      <span class="status" id="conn">connecting...</span>
+    </div>
+
+    <div class="buzzwrap">
+      <div class="statusline dim" id="statusline">Waiting for the host</div>
+      <button class="buzz" id="buzz" disabled>Buzz</button>
+      <div class="statusline dim" id="hint" style="font-size:18px">Space or click when buzzers open</div>
+    </div>
+
+    <div style="display:grid;gap:12px">
+      <div class="miniboard" id="mini"></div>
+      <div class="pscores" id="pscores"></div>
+    </div>
+  </div>
+
+  <script type="module" src="player.js"></script>
+</body>
+</html>
