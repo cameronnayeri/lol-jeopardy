@@ -1,0 +1,141 @@
+{
+  "title": "Sample Game",
+  "boards": [
+    {
+      "name": "Round 1",
+      "categories": [
+        {
+          "name": "Category One",
+          "clues": [
+            { "clue": "The $200 clue. Clues are read as statements; players answer in question form.", "answer": "What is the easiest one?" },
+            { "clue": "The $400 clue.", "answer": "Answer 2" },
+            { "clue": "The $600 clue.", "answer": "Answer 3" },
+            { "clue": "The $800 clue.", "answer": "Answer 4" },
+            { "clue": "The $1000 clue. Hardest one goes last.", "answer": "Answer 5" }
+          ]
+        },
+        {
+          "name": "Category Two",
+          "note": "Optional. Shown under every clue in this category on the host screen, for example: answer is Real or Fake.",
+          "clues": [
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" }
+          ]
+        },
+        {
+          "name": "Category Three",
+          "clues": [
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" }
+          ]
+        },
+        {
+          "name": "Category Four",
+          "clues": [
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" }
+          ]
+        },
+        {
+          "name": "Category Five",
+          "clues": [
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" }
+          ]
+        },
+        {
+          "name": "Category Six",
+          "clues": [
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Round 2",
+      "categories": [
+        {
+          "name": "Double Category One",
+          "clues": [
+            { "clue": "Values on the second board are doubled automatically: 400 to 2000.", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" }
+          ]
+        },
+        {
+          "name": "Double Category Two",
+          "clues": [
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" }
+          ]
+        },
+        {
+          "name": "Double Category Three",
+          "clues": [
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" }
+          ]
+        },
+        {
+          "name": "Double Category Four",
+          "clues": [
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" }
+          ]
+        },
+        {
+          "name": "Double Category Five",
+          "clues": [
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" }
+          ]
+        },
+        {
+          "name": "Double Category Six",
+          "clues": [
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" },
+            { "clue": "Clue", "answer": "Answer" }
+          ]
+        }
+      ]
+    }
+  ],
+  "final": {
+    "category": "Final Category",
+    "clue": "The Final Jeopardy clue. Every player wagers, then answers.",
+    "answer": "Final answer"
+  }
+}

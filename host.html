@@ -12,13 +12,17 @@
   <div id="setup" class="center">
     <div class="card">
       <h1>Host a game</h1>
-      <p>Share your screen in Discord and send players the room code. Only this page shows clues and answers.</p>
+      <p>Share your screen in Discord and send players the room code. Only this page shows clues. Answers never appear on screen; keep the host sheet on another monitor.</p>
       <label>Room code
         <input id="code" placeholder="e.g. LOL1" maxlength="8" autocomplete="off" />
       </label>
-      <label>Board
-        <select id="boardSel"></select>
+      <label>Questions
+        <select id="gameSel"></select>
       </label>
+      <label>Or upload a custom file (JSON, see sample-questions.json)
+        <input type="file" id="file" accept=".json,application/json" />
+      </label>
+      <p id="fileMsg"></p>
       <button id="startBtn">Create or resume game</button>
       <p id="setupMsg"></p>
     </div>
@@ -27,7 +31,7 @@
   <!-- Game -->
   <div id="game" class="host hidden">
     <div class="topbar">
-      <h1>LoL Jeopardy</h1>
+      <h1 id="titleLabel">LoL Jeopardy</h1>
       <span class="code" id="codeLabel"></span>
       <span id="boardLabel" class="status"></span>
       <span class="spacer"></span>
@@ -55,9 +59,38 @@
         <div class="scores" id="scores"></div>
       </div>
       <div class="log" id="log"></div>
+
+      <details class="settings" open>
+        <summary>Settings</summary>
+        <label>Text speed <span data-v="speed"></span>
+          <input type="range" data-s="speed" min="1" max="8" step="0.5" />
+        </label>
+        <label>Buzz delay after last word <span data-v="delay"></span>
+          <input type="range" data-s="delay" min="0" max="3" step="0.25" />
+        </label>
+        <label class="check"><input type="checkbox" data-s="noBuzzWhileReading" /> No buzzing while reading</label>
+        <label class="check"><input type="checkbox" data-s="rebuzz" /> Wrong player may buzz again</label>
+        <label>Answer timer (0 = off) <span data-v="answerTimer"></span>
+          <input type="range" data-s="answerTimer" min="0" max="30" step="1" />
+        </label>
+        <label>Daily Doubles per board <span data-v="ddPerBoard"></span>
+          <input type="range" data-s="ddPerBoard" min="0" max="3" step="1" />
+        </label>
+        <label>Spam lockout: presses <span data-v="spamPresses"></span>
+          <input type="range" data-s="spamPresses" min="0" max="10" step="1" />
+        </label>
+        <label>Spam lockout: within <span data-v="spamWindow"></span>
+          <input type="range" data-s="spamWindow" min="0.5" max="5" step="0.5" />
+        </label>
+        <label>Spam lockout: duration <span data-v="spamLockout"></span>
+          <input type="range" data-s="spamLockout" min="1" max="15" step="1" />
+        </label>
+      </details>
+
       <div class="tools">
+        <button id="nextBtn" class="ghost">Next board</button>
         <button id="finalBtn" class="ghost">Final Jeopardy</button>
-        <button id="resetBtn" class="ghost">Reset board</button>
+        <button id="resetBtn" class="ghost">Reset game</button>
       </div>
     </aside>
   </div>
