@@ -42,7 +42,7 @@ Custom questions are kept in the host's browser only, never in Supabase, because
 
 The host screen never shows an answer, so it is safe to stream. Keep the host sheets in `pdf/` on a second monitor.
 
-### Settings (side panel, saved with the game)
+### Settings (gear button, top right; saved with the game)
 
 | Setting | What it does |
 |---|---|

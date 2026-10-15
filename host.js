@@ -187,6 +187,11 @@ function enterGame() {
 
   if (state.phase === "reading") openBuzzersOrRead(); // page was refreshed mid-reveal
 
+  const modal = $("#settingsModal");
+  $("#settingsBtn").onclick = () => modal.classList.toggle("hidden");
+  $("#settingsClose").onclick = () => modal.classList.add("hidden");
+  modal.onclick = (e) => { if (e.target === modal) modal.classList.add("hidden"); };
+
   $("#nextBtn").onclick = nextBoard;
   $("#finalBtn").onclick = startFinal;
   $("#resetBtn").onclick = async () => {
@@ -366,6 +371,7 @@ function startReveal(text) {
   const spans = [...body.querySelectorAll(".w")];
   let i = 0;
   const step = 1000 / state.settings.speed;
+  body.style.setProperty("--wipe", step + "ms"); // each word wipes left to right over one step, back to back
   const tick = () => {
     if (i < spans.length) {
       spans[i++].classList.add("on");
@@ -387,7 +393,7 @@ function stopReveal() {
 }
 
 function skipReveal() {
-  $("#ovBody").querySelectorAll(".w").forEach((s) => s.classList.add("on"));
+  $("#ovBody").querySelectorAll(".w").forEach((s) => s.classList.add("instant", "on"));
   openBuzzersOrRead();
 }
 
@@ -574,6 +580,7 @@ document.addEventListener("keydown", (e) => {
     if (e.code === "ArrowUp") { e.preventDefault(); judge(true); }
     if (e.code === "ArrowDown") { e.preventDefault(); judge(false); }
   }
+  if (e.code === "Escape" && !$("#settingsModal").classList.contains("hidden")) { $("#settingsModal").classList.add("hidden"); return; }
   if (e.code === "Escape") {
     if (state.phase === "reading" || state.phase === "dd") closeClueNoMark();
     else if (state.phase === "open" || state.phase === "buzzed") closeClue();

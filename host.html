@@ -36,6 +36,7 @@
       <span id="boardLabel" class="status"></span>
       <span class="spacer"></span>
       <span class="status" id="conn">connecting...</span>
+      <button id="settingsBtn" class="ghost" title="Settings">⚙</button>
     </div>
 
     <div class="stage">
@@ -60,8 +61,19 @@
       </div>
       <div class="log" id="log"></div>
 
-      <details class="settings" open>
-        <summary>Settings</summary>
+
+      <div class="tools">
+        <button id="nextBtn" class="ghost">Next board</button>
+        <button id="finalBtn" class="ghost">Final Jeopardy</button>
+        <button id="resetBtn" class="ghost">Reset game</button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Settings modal (hidden by default; keep it closed while screen sharing) -->
+  <div id="settingsModal" class="modal hidden">
+    <div class="modal-card settings">
+      <div class="modal-head"><h2>Settings</h2><button id="settingsClose" class="ghost">Close</button></div>
         <label>Text speed <span data-v="speed"></span>
           <input type="range" data-s="speed" min="1" max="8" step="0.5" />
         </label>
@@ -85,14 +97,8 @@
         <label>Spam lockout: duration <span data-v="spamLockout"></span>
           <input type="range" data-s="spamLockout" min="1" max="15" step="1" />
         </label>
-      </details>
-
-      <div class="tools">
-        <button id="nextBtn" class="ghost">Next board</button>
-        <button id="finalBtn" class="ghost">Final Jeopardy</button>
-        <button id="resetBtn" class="ghost">Reset game</button>
-      </div>
-    </aside>
+      <p class="modal-note">Saved with the game. Esc closes.</p>
+    </div>
   </div>
 
   <script type="module" src="host.js"></script>
